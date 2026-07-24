@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F6F4EB; /* warm cream */
+  --foreground: #1A1A18; /* dark text */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1A1A18; /* deep charcoal */
+    --foreground: #fcfcfc; /* soft cream */
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .gradient-aurora {
+    background: linear-gradient(135deg, rgba(236,72,153,0.8), rgba(168,85,247,0.8));
+    filter: blur(10px);
+  }
+}
