@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { CloudSun } from "lucide-react";
+import { CloudSun, AlertCircle, Sparkles, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
@@ -9,12 +9,16 @@ import { db } from "@/firebase";
 import { useAuth } from "@/utils/userContext";
 import Link from "next/link";
 import OnboardingModal from "@/components/OnboardingModal";
+import CognitiveLoader from "@/components/CognitiveLoader";
+import WeatherWidget from "@/components/WeatherWidget";
+import { useWeather } from "@/hooks/useWeather";
 
 interface CurrentOutfit {
   top: string | null;
   bottom: string | null;
   shoes: string | null;
   reasoning?: string;
+  missingPieces?: string[];
 }
 
 // Deep extractor to find the string URL regardless of what JSON shape Gemini returns
@@ -32,18 +36,25 @@ const extractUrl = (obj: any): string | null => {
 
 export default function DailyPick() {
   const { currentUser, userProfile } = useAuth();
+  const { weatherData } = useWeather();
   const [buttonText, setButtonText] = useState("Accept Outfit");
 
   // Strict UI State Waterfall Variables
   const [isFetchingWardrobe, setIsFetchingWardrobe] = useState(true);
   const [hasCompleteOutfit, setHasCompleteOutfit] = useState(false);
-  const [isCurating, setIsCurating] = useState(false);
+
+  // Cognitive Stylist Edge Case States
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isEmpty, setIsEmpty] = useState(false);
   const [currentOutfit, setCurrentOutfit] = useState<CurrentOutfit | null>(
     null,
   );
 
   // New Contextual Styling States
   const [occasion, setOccasion] = useState("Casual");
+  const [isCustomInputOpen, setIsCustomInputOpen] = useState(false);
+  const [customContext, setCustomContext] = useState("");
   const [wardrobe, setWardrobe] = useState<
     { type: string; url: string; userId?: string }[]
   >([]);
@@ -140,25 +151,38 @@ export default function DailyPick() {
   }, [currentUser]);
 
   const handleStyleMyLook = async () => {
-    if (isCurating) return;
-    setIsCurating(true);
+    if (isLoading) return;
+    setIsLoading(true);
+    setError(null);
+    setIsEmpty(false);
     setCurrentOutfit(null);
 
     try {
+      const weatherContextString = weatherData
+        ? `${weatherData.temp}°C, ${weatherData.condition} weather in ${weatherData.location}`
+        : "warm and sunny weather";
+
+      const userRequestPayload = customContext.trim()
+        ? `${occasion} - ${customContext.trim()}`
+        : occasion;
+
       const res = await fetch("/api/stylist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userRequest: occasion,
-          weatherContext: "warm and sunny",
+          userRequest: userRequestPayload,
+          weatherContext: weatherContextString,
         }),
       });
 
       if (!res.ok) {
-        throw new Error("Failed to style outfit.");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to style outfit.");
       }
 
       const data = await res.json();
+      const retrievedItems = data.retrievedItems;
+
       let outfitResult = data ? data.finalOutfit || data : null;
       if (typeof outfitResult === "string") {
         try {
@@ -168,21 +192,47 @@ export default function DailyPick() {
         }
       }
 
+      if (outfitResult?.error) {
+        if (
+          outfitResult.error.toLowerCase().includes("no items") ||
+          (Array.isArray(retrievedItems) && retrievedItems.length === 0)
+        ) {
+          setIsEmpty(true);
+          return;
+        }
+        throw new Error(outfitResult.error);
+      }
+
+      if (Array.isArray(retrievedItems) && retrievedItems.length === 0) {
+        setIsEmpty(true);
+        return;
+      }
+
       const topUrl = extractUrl(outfitResult?.top);
       const bottomUrl = extractUrl(outfitResult?.bottom);
       const shoesUrl = extractUrl(outfitResult?.shoes);
+
+      if (!topUrl && !bottomUrl && !shoesUrl) {
+        setIsEmpty(true);
+        return;
+      }
 
       setCurrentOutfit({
         top: topUrl,
         bottom: bottomUrl,
         shoes: shoesUrl,
         reasoning: outfitResult?.reasoning || "",
+        missingPieces: outfitResult?.missing_pieces || [],
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error curating outfit:", err);
+      setError(
+        err?.message ||
+          "An unexpected error occurred while curating your look. Please try again.",
+      );
       setCurrentOutfit(null);
     } finally {
-      setIsCurating(false);
+      setIsLoading(false);
     }
   };
 
@@ -254,8 +304,94 @@ export default function DailyPick() {
       );
     }
 
-    // State 3: Mood Board (Before styling triggers)
-    if (hasCompleteOutfit && !isCurating && !currentOutfit) {
+    // State 3: Skeleton Loader while curating
+    if (isLoading) {
+      return <CognitiveLoader />;
+    }
+
+    // State 4: Styled Error Banner
+    if (error) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-sm my-8 p-6 rounded-3xl bg-red-500/10 border border-red-500/20 backdrop-blur-md text-center space-y-4 shadow-lg"
+        >
+          <div className="flex items-center justify-center space-x-2 text-red-600 dark:text-red-400">
+            <AlertCircle size={20} />
+            <span className="font-semibold text-sm tracking-wide">
+              Stylist Connection Issue
+            </span>
+          </div>
+          <p className="text-xs text-red-700/80 dark:text-red-300/80 leading-relaxed">
+            {error}
+          </p>
+          <button
+            onClick={() => {
+              setError(null);
+              handleStyleMyLook();
+            }}
+            className="px-6 py-2.5 rounded-full bg-red-600/20 hover:bg-red-600/30 text-red-800 dark:text-red-200 text-xs font-medium uppercase tracking-widest transition-colors flex items-center justify-center space-x-2 mx-auto"
+          >
+            <RefreshCw size={14} />
+            <span>Try Again</span>
+          </button>
+        </motion.div>
+      );
+    }
+
+    // State 5: Inventory Missing Card
+    if (isEmpty) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-sm my-8 p-8 rounded-3xl bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-black/10 dark:border-white/10 text-center space-y-6 shadow-xl"
+        >
+          <div className="w-12 h-12 rounded-full bg-[#FFD1C8]/30 dark:bg-[#FFD1C8]/20 flex items-center justify-center mx-auto text-[#1A1A18] dark:text-white">
+            <Sparkles size={22} className="text-[#FFD1C8]" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="font-serif text-2xl font-light tracking-wide text-black/90 dark:text-white/90">
+              Inventory Missing
+            </h3>
+            <p className="font-[family-name:var(--font-cormorant)] text-sm italic text-black/60 dark:text-white/60 leading-relaxed">
+              No matching clothing items were found in your inventory for "
+              {occasion}". Please upload more items to your digital wardrobe or
+              tweak your occasion choice.
+            </p>
+          </div>
+          <div className="flex flex-col space-y-3 pt-2">
+            <Link
+              href="/upload"
+              className="w-full py-3.5 rounded-full bg-[#FFD1C8] text-[#1A1A18] font-bold tracking-widest uppercase text-xs shadow-md hover:shadow-lg transition-all"
+            >
+              Upload Clothing Items
+            </Link>
+            <button
+              onClick={() => {
+                setIsEmpty(false);
+                setError(null);
+                setCurrentOutfit(null);
+              }}
+              className="w-full py-2.5 rounded-full border border-black/20 dark:border-white/20 text-black/70 dark:text-white/70 text-xs uppercase tracking-widest hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            >
+              Tweak Query / Go Back
+            </button>
+          </div>
+        </motion.div>
+      );
+    }
+
+    // State 6: Mood Board (Before styling triggers)
+    if (
+      hasCompleteOutfit &&
+      !isLoading &&
+      !error &&
+      !isEmpty &&
+      !currentOutfit
+    ) {
       const occasions = ["Casual", "Office", "Night Out", "Gym"];
       return (
         <motion.div
@@ -281,63 +417,81 @@ export default function DailyPick() {
             ))}
           </div>
 
-          <motion.button
-            type="button"
-            onClick={handleStyleMyLook} // Or whatever your onClick is!
-            whileTap={{ scale: 0.95 }}
-            initial="default"
-            whileHover="hover"
-            className="relative w-full max-w-xs mt-6 py-4 rounded-full bg-[#FFD1C8] text-[#1A1A18] font-bold tracking-widest uppercase text-xs shadow-[0_0_35px_8px_rgba(255,209,200,0.35)] transition-shadow duration-500 hover:shadow-[0_0_50px_12px_rgba(224,195,252,0.6)] overflow-hidden"
-          >
-            {/* The Iridescent Gradient Layer (Hidden by default) */}
-            <motion.div
-              variants={{
-                default: { opacity: 0, backgroundPosition: "0% 50%" },
-                hover: { opacity: 1, backgroundPosition: "100% 50%" },
-              }}
-              transition={{
-                opacity: { duration: 0.4, ease: "easeInOut" },
-                backgroundPosition: {
-                  duration: 3,
-                  ease: "linear",
-                  repeat: Infinity,
-                  repeatType: "mirror",
-                },
-              }}
-              style={{
-                backgroundImage:
-                  "linear-gradient(90deg, #FFD1C8, #E0C3FC, #C2E9FB, #FFD1C8, #FDF0BA, #E0C3FC)",
-                backgroundSize: "300% 100%",
-              }}
-              className="absolute inset-0 pointer-events-none"
-            />
+          {/* Toggle & Expandable Input Container */}
+          <div className="flex flex-col items-center w-full max-w-sm">
+            <button
+              type="button"
+              onClick={() => setIsCustomInputOpen((prev) => !prev)}
+              className="text-xs font-medium text-gray-400 dark:text-gray-500 tracking-[0.15em] cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors pb-4 uppercase"
+            >
+              {isCustomInputOpen
+                ? "- HIDE SPECIFIC DETAILS"
+                : "+ ADD SPECIFIC DETAILS"}
+            </button>
 
-            {/* The Button Text */}
-            <span className="relative z-10 block">Style My Look</span>
-          </motion.button>
+            <AnimatePresence>
+              {isCustomInputOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: "easeInOut" }}
+                  className="w-full overflow-hidden"
+                >
+                  <input
+                    type="text"
+                    value={customContext}
+                    onChange={(e) => setCustomContext(e.target.value)}
+                    placeholder="e.g., Pitch meeting in heavy AC..."
+                    className="w-full max-w-sm bg-transparent border-0 border-b border-gray-300 dark:border-gray-700 focus:border-gray-800 dark:focus:border-gray-200 focus:ring-0 text-center text-sm pb-2 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 transition-colors mx-auto block mb-6 outline-none"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <motion.button
+              type="button"
+              onClick={handleStyleMyLook}
+              disabled={isLoading}
+              whileTap={{ scale: 0.95 }}
+              initial="default"
+              whileHover="hover"
+              className="relative w-full max-w-xs py-4 rounded-full bg-[#FFD1C8] text-[#1A1A18] font-bold tracking-widest uppercase text-xs shadow-[0_0_35px_8px_rgba(255,209,200,0.35)] transition-shadow duration-500 hover:shadow-[0_0_50px_12px_rgba(224,195,252,0.6)] overflow-hidden"
+            >
+              {/* The Iridescent Gradient Layer (Hidden by default) */}
+              <motion.div
+                variants={{
+                  default: { opacity: 0, backgroundPosition: "0% 50%" },
+                  hover: { opacity: 1, backgroundPosition: "100% 50%" },
+                }}
+                transition={{
+                  opacity: { duration: 0.4, ease: "easeInOut" },
+                  backgroundPosition: {
+                    duration: 3,
+                    ease: "linear",
+                    repeat: Infinity,
+                    repeatType: "mirror",
+                  },
+                }}
+                style={{
+                  backgroundImage:
+                    "linear-gradient(90deg, #FFD1C8, #E0C3FC, #C2E9FB, #FFD1C8, #FDF0BA, #E0C3FC)",
+                  backgroundSize: "300% 100%",
+                }}
+                className="absolute inset-0 pointer-events-none"
+              />
+
+              {/* The Button Text */}
+              <span className="relative z-10 block">
+                {isLoading ? "Orchestrating..." : "Style My Look"}
+              </span>
+            </motion.button>
+          </div>
         </motion.div>
       );
     }
 
-    // State 4: AI Curating
-    if (isCurating) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center w-full my-16 px-6 text-center space-y-6">
-          <div className="relative w-16 h-16">
-            <div className="absolute inset-0 rounded-full border-2 border-dashed border-[#FFD1C8] animate-spin duration-3000" />
-            <div className="absolute inset-2 rounded-full bg-[#FFD1C8]/20 animate-ping" />
-          </div>
-          <p className="font-[family-name:var(--font-cormorant)] text-xl italic text-black/60 dark:text-white/60 tracking-wide animate-pulse">
-            Your personal AI stylist is curating a look...
-          </p>
-          <span className="text-[9px] tracking-widest text-black/40 dark:text-white/40 uppercase">
-            Selecting items from your closet
-          </span>
-        </div>
-      );
-    }
-
-    // State 5: Success Pipeline (Floating Clothes Reveal)
+    // State 7: Success Pipeline (Floating Clothes Reveal)
     if (
       currentOutfit &&
       (currentOutfit.top || currentOutfit.bottom || currentOutfit.shoes)
@@ -385,13 +539,24 @@ export default function DailyPick() {
           </div>
 
           {currentOutfit.reasoning && (
-            <div className="mt-4 max-w-sm px-6 py-4 rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/5 dark:border-white/5 text-center">
+            <div className="mt-4 max-w-sm px-6 py-4 rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/5 dark:border-white/5 text-center space-y-2">
               <p className="text-[9px] tracking-[0.2em] uppercase text-black/40 dark:text-white/40 mb-1 font-semibold">
                 Aura's Notes
               </p>
               <p className="font-[family-name:var(--font-cormorant)] text-sm italic text-black/80 dark:text-white/80 leading-relaxed">
                 "{currentOutfit.reasoning}"
               </p>
+              {currentOutfit.missingPieces &&
+                currentOutfit.missingPieces.length > 0 && (
+                  <div className="pt-2 border-t border-black/5 dark:border-white/5">
+                    <p className="text-[9px] tracking-wider uppercase text-amber-600 dark:text-amber-400 font-medium">
+                      Missing Climate Pieces:{" "}
+                      <span className="normal-case italic opacity-90">
+                        {currentOutfit.missingPieces.join(", ")}
+                      </span>
+                    </p>
+                  </div>
+                )}
             </div>
           )}
 
@@ -408,7 +573,9 @@ export default function DailyPick() {
             <button
               onClick={() => {
                 setCurrentOutfit(null);
-                setIsCurating(false);
+                setIsEmpty(false);
+                setError(null);
+                setIsLoading(false);
               }}
               className="px-6 py-2 rounded-full text-xs uppercase tracking-widest border border-black/10 dark:border-white/10 text-black/50 dark:text-white/50 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             >
@@ -419,7 +586,7 @@ export default function DailyPick() {
       );
     }
 
-    // State 6: Safety Catch (if AI resolution failed or returned empty JSON)
+    // State 8: Safety Catch
     return (
       <div className="flex-1 flex flex-col items-center justify-center w-full my-12 px-6 text-center space-y-6">
         <p className="font-[family-name:var(--font-cormorant)] text-2xl italic text-black/50 dark:text-white/50 tracking-wide">
@@ -428,7 +595,9 @@ export default function DailyPick() {
         <button
           onClick={() => {
             setCurrentOutfit(null);
-            setIsCurating(false);
+            setIsEmpty(false);
+            setError(null);
+            setIsLoading(false);
           }}
           className="px-8 py-3 rounded-full text-xs uppercase tracking-widest border border-black/20 dark:border-white/20 text-black/80 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
         >
@@ -452,9 +621,8 @@ export default function DailyPick() {
             <h1 className="font-serif text-4xl font-light tracking-[0.25em] text-gray-900 dark:text-white antialiased">
               DAILY PICK
             </h1>
-            <div className="flex items-center space-x-2 text-xs uppercase tracking-wider opacity-60">
-              <CloudSun size={14} />
-              <span>22°C</span>
+            <div className="flex items-center justify-center pt-1">
+              <WeatherWidget />
             </div>
           </div>
 

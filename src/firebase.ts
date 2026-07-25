@@ -3,7 +3,7 @@ import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "process.env.NEXT_PUBLIC_FIREBASE_API_KEY,",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: "aura-app-2c4ea.firebaseapp.com",
   projectId: "aura-app-2c4ea",
   storageBucket: "aura-app-2c4ea.firebasestorage.app",

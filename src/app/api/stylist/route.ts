@@ -13,8 +13,11 @@ export async function POST(req: Request) {
       finalOutfit: {},
     });
 
-    // Return the generated outfit recommendation object
-    return NextResponse.json({ finalOutfit: finalState.finalOutfit });
+    // Return the generated outfit recommendation object along with retrieved items
+    return NextResponse.json({
+      finalOutfit: finalState.finalOutfit,
+      retrievedItems: finalState.retrievedItems || [],
+    });
   } catch (error: any) {
     console.error("Stylist Graph Execution Error:", error);
     return NextResponse.json(

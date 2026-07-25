@@ -69,6 +69,7 @@ export async function generateOutfit(state: typeof StateAnnotation.State) {
         top: "",
         bottom: "",
         shoes: "",
+        missing_pieces: ["top", "bottom", "shoes"],
         reasoning:
           "Please upload some garments to your wardrobe first so I can style an outfit for you!",
       },
@@ -83,23 +84,26 @@ export async function generateOutfit(state: typeof StateAnnotation.State) {
   });
 
   const prompt = `You are Aura, an expert fashion stylist and strict data processor.
-Your task is to select a cohesive outfit EXCLUSIVELY from the provided "Retrieved Items" list.
+Your task is to select a cohesive outfit EXCLUSIVELY from the provided "Retrieved Items" list while strictly respecting live weather conditions.
 
 User Request: "${userRequest || "Suggest a nice outfit."}"
-Weather Context: "${weatherContext || "Any weather"}"
+Live Weather Context: "${weatherContext || "Any weather"}"
 Retrieved Items (JSON list of garments):
 ${JSON.stringify(retrievedItems, null, 2)}
 
 CRITICAL SYSTEM INSTRUCTIONS:
 1. ABSOLUTE GROUNDING: You MUST ONLY select items that exist in the "Retrieved Items" array. Do not invent, hallucinate, or suggest garments outside of this list.
-2. SELECTION PROTOCOL: Try to select one "top", one "bottom", and one "shoes". Use the 'cloudinary_url' for the selection. If a category is completely missing or inappropriate, you MUST return an empty string "" for that field. 
-3. FACTUAL REASONING: Your "reasoning" MUST accurately describe the physical garments you ACTUALLY selected based on their metadata (style, category, description). Do NOT describe ideal clothes for the weather if you did not select them. Acknowledge any missing items gracefully.
-4. JSON OUTPUT STRUCTURE:
+2. STRICT ENVIRONMENTAL GUARDRAILS: You MUST filter and evaluate all recommendations based strictly on the provided Live Weather Context. Do NOT recommend light/warm-weather items for cold/rainy weather, nor heavy winter coats for hot sunny weather.
+3. MISSING CLIMATE PIECES: If the retrieved vector inventory lacks climate-appropriate items necessary for the current weather (e.g. no heavy coat for cold weather, or no raincoat for rain), you MUST list those missing items explicitly under the "missing_pieces" array rather than hallucinating or ignoring the climate.
+4. SELECTION PROTOCOL: Select one "top", one "bottom", and one "shoes" from Retrieved Items using their 'cloudinary_url'. If a category is missing or lacks weather-appropriate pieces, return an empty string "" for that field and list the item in "missing_pieces".
+5. FACTUAL REASONING: Your "reasoning" MUST accurately describe the physical garments you ACTUALLY selected based on their metadata and explain how they fit the weather and occasion.
+6. JSON OUTPUT STRUCTURE:
 {
   "top": "cloudinary_url or empty string",
   "bottom": "cloudinary_url or empty string",
   "shoes": "cloudinary_url or empty string",
-  "reasoning": "Strictly accurate explanation of the actual selected pieces."
+  "missing_pieces": ["list of climate-appropriate garments missing from inventory for this weather"],
+  "reasoning": "Strictly accurate explanation of the actual selected pieces and weather suitability."
 }`;
 
   try {
@@ -116,6 +120,7 @@ CRITICAL SYSTEM INSTRUCTIONS:
         top: "",
         bottom: "",
         shoes: "",
+        missing_pieces: [],
         reasoning:
           "An error occurred while generating the outfit recommendation.",
       },
