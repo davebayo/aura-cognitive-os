@@ -15,8 +15,10 @@ const cormorant = Cormorant_Garamond({
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Smart Wardrobe Daily Pick',
-  description: 'Your Smart Wardrobe App',
+  // title: 'Smart Wardrobe Daily Pick',
+  // description: 'Your Smart Wardrobe App',
+  title: 'Aura Cognitive OS | Agentic Wardrobe Orchestration',
+  description: 'A multi-agent UI sandbox demonstrating intelligent wardrobe selection and environment-aware styling via the Aura Cognitive OS.',
 }
 
 export default function RootLayout({
