@@ -2,7 +2,7 @@
 
 > **An agentic multi-modal orchestration layer, currently demonstrating its capabilities through an environment-aware wardrobe stylist sandbox.**
 
-**[Live Demo](https://www.google.com/search?q=https://aura-cognitive-os-8ck1.vercel.app)** 
+**[Live Demo](https://aura-cognitive-os-8ck1.vercel.app/)** 
 
 # The Problem
 
