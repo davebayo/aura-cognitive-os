@@ -18,6 +18,7 @@ interface WardrobeItem {
   genderStyle: "Menswear" | "Womenswear" | "Unisex" | string;
   userId: string;
   dateAdded: string;
+  imageHash?: string;
   topUrl?: string;
   bottomUrl?: string;
   shoesUrl?: string;
@@ -226,7 +227,8 @@ export default function UploadOutfit() {
           image: base64Data,
           id,
           category,
-          genderStyle
+          genderStyle,
+          userId: currentUser?.uid || "unauthenticated"
         })
       });
 
@@ -237,10 +239,10 @@ export default function UploadOutfit() {
       }
       
       const data = await response.json();
-      return data.secure_url;
+      return { url: data.secure_url as string, imageHash: data.imageHash as string };
     } catch (err: any) {
       console.error("Cloudinary secure upload error:", err);
-      throw new Error("Background removal failed. The image might be too complex to mask. Please upload a clear photo with a distinct background.");
+      throw err;
     }
   };
 
@@ -282,7 +284,7 @@ export default function UploadOutfit() {
         const uniqueId = docRef.id;
 
         // Upload to Cloudinary with background removal and Pinecone sync
-        const url = await uploadToCloudinary(item.file, uniqueId, item.category, item.genderStyle);
+        const { url, imageHash } = await uploadToCloudinary(item.file, uniqueId, item.category, item.genderStyle);
         const categoryKey = getCategoryKey(item.category);
 
         const itemData: WardrobeItem = {
@@ -291,6 +293,7 @@ export default function UploadOutfit() {
           genderStyle: item.genderStyle,
           userId: currentUser?.uid || "unauthenticated",
           dateAdded: new Date().toISOString(),
+          imageHash: imageHash,
           [categoryKey]: url
         };
 

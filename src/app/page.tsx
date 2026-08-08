@@ -59,6 +59,7 @@ export default function DailyPick() {
     { type: string; url: string; userId?: string }[]
   >([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -224,6 +225,7 @@ export default function DailyPick() {
         reasoning: outfitResult?.reasoning || "",
         missingPieces: outfitResult?.missing_pieces || [],
       });
+      setShowNotesModal(true);
     } catch (err: any) {
       console.error("Error curating outfit:", err);
       setError(
@@ -538,28 +540,6 @@ export default function DailyPick() {
             )}
           </div>
 
-          {currentOutfit.reasoning && (
-            <div className="mt-4 max-w-sm px-6 py-4 rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/5 dark:border-white/5 text-center space-y-2">
-              <p className="text-[9px] tracking-[0.2em] uppercase text-black/40 dark:text-white/40 mb-1 font-semibold">
-                Aura's Notes
-              </p>
-              <p className="font-[family-name:var(--font-cormorant)] text-sm italic text-black/80 dark:text-white/80 leading-relaxed">
-                "{currentOutfit.reasoning}"
-              </p>
-              {currentOutfit.missingPieces &&
-                currentOutfit.missingPieces.length > 0 && (
-                  <div className="pt-2 border-t border-black/5 dark:border-white/5">
-                    <p className="text-[9px] tracking-wider uppercase text-amber-600 dark:text-amber-400 font-medium">
-                      Missing Climate Pieces:{" "}
-                      <span className="normal-case italic opacity-90">
-                        {currentOutfit.missingPieces.join(", ")}
-                      </span>
-                    </p>
-                  </div>
-                )}
-            </div>
-          )}
-
           <div className="w-full mt-8 mb-8 flex flex-col items-center space-y-4 px-4 max-w-sm">
             <motion.button
               onClick={handleAcceptOutfit}
@@ -642,6 +622,124 @@ export default function DailyPick() {
           already own.
         </p>
       </main>
+
+      {/* Daily Pick Results Modal */}
+      <AnimatePresence>
+        {showNotesModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md p-8 bg-[#f5f4ef] rounded-3xl shadow-2xl flex flex-col items-center text-center space-y-6 text-[#1A1A18]"
+            >
+              {/* Header */}
+              <div className="flex flex-col items-center justify-center mb-6">
+                <div className="flex items-center justify-center">
+                  {/* Filled Sparkles SVG */}
+                  <svg className="w-8 h-8 mr-3 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {/* Large Bottom-Right Sparkle */}
+                    <path d="M16 22C16 17 19.5 13.5 24 13.5C19.5 13.5 16 10 16 5C16 10 12.5 13.5 8 13.5C12.5 13.5 16 17 16 22Z" fill="#FBC4C4"/>
+                    {/* Small Top-Left Sparkle */}
+                    <path d="M6 10.5C6 8.5 7.5 7 9.5 7C7.5 7 6 5.5 6 3.5C6 5.5 4.5 7 2.5 7C4.5 7 6 8.5 6 10.5Z" fill="#FBC4C4"/>
+                  </svg>
+                  
+                  <h2 
+                    className="text-4xl tracking-widest text-gray-900 uppercase"
+                    style={{ fontFamily: 'var(--font-cormorant), serif' }}
+                  >
+                    Daily Pick
+                  </h2>
+                </div>
+                
+                <p className="mt-2 text-[10px] font-semibold tracking-[0.3em] text-gray-400 uppercase">
+                  Your Personal Stylist Agent
+                </p>
+              </div>
+
+              {/* Aura's Notes Container */}
+              {currentOutfit?.reasoning && (
+                <div className="w-full p-5 rounded-2xl bg-black/[0.04] border border-black/5 text-center space-y-2">
+                  <p className="text-[9px] tracking-[0.2em] uppercase font-semibold text-black/50">
+                    AURA'S NOTES
+                  </p>
+                  <p className="font-[family-name:var(--font-cormorant)] text-sm italic text-black/80 leading-relaxed">
+                    "{currentOutfit.reasoning}"
+                  </p>
+                  {currentOutfit.missingPieces &&
+                    currentOutfit.missingPieces.length > 0 && (
+                      <div className="pt-2 border-t border-black/5">
+                        <p className="text-[9px] tracking-wider uppercase text-amber-700 font-medium">
+                          Missing Climate Pieces:{" "}
+                          <span className="normal-case italic opacity-90">
+                            {currentOutfit.missingPieces.join(", ")}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                </div>
+              )}
+
+              {/* Clothing Grid */}
+              <div className="grid grid-cols-3 gap-3 w-full">
+                {[
+                  { label: "Top", src: currentOutfit?.top },
+                  { label: "Bottom", src: currentOutfit?.bottom },
+                  { label: "Shoes", src: currentOutfit?.shoes },
+                ].map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white rounded-2xl p-3 shadow-sm border border-black/5 flex flex-col items-center justify-center aspect-square overflow-hidden relative group"
+                  >
+                    {item.src ? (
+                      <Image
+                        src={item.src}
+                        alt={item.label}
+                        width={100}
+                        height={100}
+                        className="object-contain h-full w-auto max-h-20"
+                      />
+                    ) : (
+                      <span className="text-[10px] uppercase tracking-wider text-black/30">
+                        {item.label}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="w-full flex flex-col space-y-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentOutfit(null);
+                    setIsEmpty(false);
+                    setError(null);
+                    setIsLoading(false);
+                    setShowNotesModal(false);
+                  }}
+                  className="w-full py-3.5 rounded-full bg-[#FFD1C8] text-[#1A1A18] font-bold tracking-widest uppercase text-xs shadow-sm hover:brightness-95 transition-all"
+                >
+                  STYLE ANOTHER LOOK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNotesModal(false)}
+                  className="w-full py-3.5 rounded-full bg-white border border-black/20 text-black/80 font-bold tracking-widest uppercase text-xs hover:bg-gray-50 transition-all"
+                >
+                  CLOSE
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
